@@ -1,5 +1,14 @@
 # Trae & Buddy 签到助手
 
+> ## ⚠️ 项目声明（请先读）
+>
+> 本项目**基于开源项目 [cxqc168-wq / Trae-workbuddyAssistant](https://github.com/cxqc168-wq/Trae-workbuddyAssistant/) 修改而来**。
+> 界面布局、交互形态与部分产品思路参考了该项目（原项目为 Tauri + React/Rust 技术栈），
+> 在此基础上由本人**重写实现**并做了大量功能扩展 —— 本仓库是一套独立的 Python 实现，
+> 不是原项目的分支拷贝，两者代码不通用。
+>
+> 原项目的著作权归原作者所有，在此郑重致谢。如果你喜欢本项目，也请一并为原项目点个 Star。
+
 把 **TraeWork / TraeCN / WorkBuddy** 三个平台的每日签到，装进一个桌面 GUI；
 同一套签到核心也能作为命令行脚本 + Windows 计划任务在后台静默执行。
 
@@ -9,9 +18,79 @@
 | **签到核心** | `核心脚本/` —— GUI 与命令行**共用同一份**签到逻辑，只此一份拷贝 |
 | **运行平台** | Windows 10 / 11（用到注册表、计划任务、`Shell_NotifyIcon` 等 Windows 能力） |
 
-> 界面复刻自 [Trae-workbuddyAssistant](https://github.com/cxqc168-wq/Trae-workbuddyAssistant)，
-> 但**签到逻辑没有重写**：GUI 通过 `app/services/runner.py` 直接调用核心模块，
-> 两边共用同一份 `config.json` / `logs/`，不会各签各的。
+GUI 与命令行**签到逻辑只此一份**：界面通过 `app/services/runner.py` 直接调用核心模块，
+两边共用同一份 `config.json` / `logs/`，不会各签各的。
+
+---
+
+## 相比原项目的新增与创新
+
+### 1. 架构 —— 整套重写为纯 Python，且不再需要「装证书 + 起代理」
+
+| 原项目 | 本项目 |
+| --- | --- |
+| Tauri（Rust + React 前端），构建需要 Node + Rust 工具链 | **纯 Python + 标准库 tkinter**，`pip install -r requirements.txt` 就能源码运行，也能打成单个 exe 分发 |
+| 前后端分离，靠 `invoke(command)` 契约通信 | 单进程桌面应用，`python main.py` 直接跑，无 IPC 层 |
+| 需要把本地 CA 证书装进「受信任的根证书颁发机构」，再起代理进程抓取 JWT | **不装证书、不做中间人代理**：直接读本机既有的登录态 —— IDE 运行日志、浏览器持久化会话、桌面端 auth 文件 |
+
+### 2. 平台覆盖 —— 三平台一体化
+
+- **TraeWork**：Playwright 持久化浏览器会话签到，登录一次长期复用（每个账号独立 profile）
+- **TraeCN**：从 Trae 系客户端日志里提取 JWT，直连 `checkin_credits/status|claim` 判定，不依赖页面渲染
+- **WorkBuddy**：读桌面端 auth 文件 + 本地令牌快照，支持多账号累积
+- 三个平台在同一个界面里切换，账号模型、签到流程、记录格式统一
+
+### 3. 账号自动发现 —— 不用手填 uid 和令牌
+
+- 扫描本机 **Trae CN IDE / TRAE SOLO CN 桌面端**日志里的昵称与 uid，自动识别「本机登录的是谁」
+- 扫描 `profiles/` 下的 Chromium 会话目录判断登录态，**一键纳入**（也可全部纳入）
+- WorkBuddy 一键「捕获当前账号」，切换账号后再捕获即可逐步累积
+- 发现结果用「已识别 / 已纳入 / 可纳入 / 未登录」区分，不让人猜
+
+### 4. 签到健康看板 —— 不只画一条积分曲线
+
+- 今日完成度、近 7 日成功率、实际领取积分、下一次自动签到时间、近期开工流水
+- 状态语义细分 `ok / skip / busy(待复核) / expired / fail`：把「服务端限流待复核」
+  与「真失败」分开，避免积分其实已到账却报「失败」
+
+### 5. 自动化执行链 —— 签到 × 补跑 × 弹窗联动
+
+- 计划任务三类触发器：**每日定时 + 开机自启（延迟补跑）+ 网络恢复瞬间补跑**
+- 幂等门控：已签完的那一轮秒退，不开浏览器、不发请求
+- **手动优先且只等不抢**：手动点击时等自动化让出浏览器锁（最多 120 秒，每 5 秒报进度），
+  避免并发写坏同一个 `user-data-dir`；计划任务与命令行行为完全不受影响
+- 补跑弹窗按关键节点收敛（首轮 / 全部签完 / 窗口最后一轮仍失败），避免一天弹十几次
+
+### 6. 凭据自动刷新
+
+- 后台按间隔自动重新捕获，也支持**源文件一变就立刻刷新**（重开 IDE、切换账号后界面马上准确）
+- 三平台凭据寿命差两个数量级（约 8 小时 / 5 天 / 60 天），界面直接标注「有效 / 临期」
+
+### 7. 本地大模型接入 —— 云端账号池之外还能接本地模型
+
+- 同一个 OpenAI 兼容端口按**模型名自动路由**：
+  `local/ollama/<模型>` → Ollama、`local/llamacpp/<模型>` → llama.cpp、其余名字 → 云端账号池轮转
+- Ollama 的 NDJSON 与 llama.cpp 的 SSE **两种原生协议都翻译成标准 OpenAI 格式**，支持流式
+- 只连已运行的后端、不代管进程；回环请求强制绕开代理环境变量（避免 `HTTP 502 upstream` 之类假故障）
+
+### 8. WorkBuddy 的抗丢失设计
+
+- 令牌归档 `logs/wb_tokens_archive.json` **只增不减**，界面提供「找回历史账号」，快照被写坏也能恢复
+- 写入路径加**严格读护栏**（读不出来就不写），杜绝「一次瞬时读失败 → 已保存账号全被清空」
+- 新版把昵称/令牌加密（AES-GCM）后，本项目**不去硬解**，而是从同目录的历史明文快照按 uid 反查，
+  都找不到时如实退回 uid 前缀，绝不把加密串当令牌发出去
+
+### 9. 设备标识重置
+
+- 覆盖 6 层：machineid / `storage.json` telemetry / aha.device / TinyStorage / 注册表 MachineGuid / webview 追踪数据
+- **先扫描、后执行**，每个被改动的文件自动备份到 `%APPDATA%\TraeBuddyDeviceReset\backups\<时间戳>\`
+
+### 10. 体验与工程化
+
+- 无边框窗口（真正 0×0 非客户区）+ 原生边缘缩放，纯 ctypes 系统托盘（**零第三方依赖**）、亮/暗双主题、液态玻璃结果卡片
+- 数据目录统一抽象 `runtime.data_root()`：源码 / exe / 便携三态一致，可用 `TRAEBUDDY_HOME` 覆盖
+- 100+ 项自检与回归脚本，**关键断言都带正负对照**（防止「全绿」其实断言从未生效）
+- 性能：页面渲染 18 995 ms → 约 1 515 ms，切换板块 4 553 ms → 565 ms（页面缓存 + 掐掉同步阻塞）
 
 ---
 
@@ -207,6 +286,23 @@ python AutoCheckinGUI/tests/test_api_local_e2e.py   # 真起 HTTP 服务 + 真�
 
 * 界面与交互参考：[Trae-workbuddyAssistant](https://github.com/cxqc168-wq/Trae-workbuddyAssistant)
 * 本地模型接入：Ollama、llama.cpp
+
+---
+
+## 联系作者
+
+| | |
+| --- | --- |
+| 邮箱 | **2571543714@qq.com** |
+| 反馈 | 欢迎提 Issue / PR；也欢迎在 Issue 里附上 `程序.exe --selftest` 的输出，排障最快 |
+
+## 赞赏支持
+
+如果这个项目帮到了你，可以请作者喝杯咖啡 ☕ 感谢支持：
+
+<img src="assets/reward_qr.jpg" width="260" alt="作者赞赏码">
+
+> 程序内「作者」入口里也放了同一张赞赏码（`AutoCheckinGUI/assets/reward_qr.png`）。
 
 ## 许可
 
