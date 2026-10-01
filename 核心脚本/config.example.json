@@ -1,0 +1,38 @@
+{
+  "traework": {
+    "enabled": true,
+    "accounts": []
+  },
+  "workbuddy": {
+    "enabled": true,
+    "auto_detect_current": true,
+    "use_saved_tokens": true
+  },
+  "traecn": {
+    "enabled": true
+  },
+  "schedule": {
+    "daily_times": [
+      "09:00",
+      "21:00"
+    ],
+    "checkin_time": "09:00",
+    "run_at_logon": true,
+    "logon_delay_seconds": 10,
+    "network_wait_minutes": 720,
+    "retry_enabled": true,
+    "retry_interval_minutes": 30,
+    "retry_window_minutes": 360
+  },
+  "credentials": {
+    "auto_refresh": true,
+    "refresh_interval_hours": 6,
+    "refresh_on_source_change": true
+  },
+  "options": {
+    "headless": true,
+    "record_export_enabled": false,
+    "record_export_path": "",
+    "retry_toast_quiet": true
+  }
+}
