@@ -306,5 +306,10 @@ python AutoCheckinGUI/tests/test_api_local_e2e.py   # 真起 HTTP 服务 + 真�
 
 ## 许可
 
-本仓库尚未附带开源许可证文件。若要公开分发，请先选定一个许可证
-（例如 MIT）并补一个 `LICENSE`；在此之前默认保留所有权利。
+本项目采用 **MIT 许可证**，详见 [LICENSE](LICENSE)。
+
+> **关于许可证的说明**：本项目在 README 开头已声明**基于
+> [Trae-workbuddyAssistant](https://github.com/cxqc168-wq/Trae-workbuddyAssistant/) 修改而来**，
+> 但仓库内**不包含该项目的源代码**（这是一套独立的 Python 重写实现），因此按 MIT 发布。
+> 如果你要基于本项目做二次分发，建议同时查看原项目的许可条款；
+> 若原项目采用 GPL / AGPL 等强著佐权协议，请把本项目的许可证调整为兼容协议。
